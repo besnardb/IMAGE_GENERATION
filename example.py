@@ -23,8 +23,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 
-from IMAGE_GENERATION import SkyInstrument, draw_random_image_parameters, image_generator
-from IMAGE_GENERATION.gaussian_random_fields import (
+import image_generator
+from random_sky_parameters import draw_random_image_parameters
+from gaussian_random_fields import (
+    make_grid,
     powerlaw_psd,
     grf_from_psd,
     nebula,
@@ -39,10 +41,11 @@ except ImportError:
     HAS_MPL = False
     print("Matplotlib not available — text output only.")
 
+GENERATE_COMPOSITES = False
 N_PIX = 1024
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-instrument = SkyInstrument(n_pix=N_PIX, use_cupy=False)
+grid = make_grid(n_pix=N_PIX, use_cupy=False)
 
 
 def _show(ax, img, title="", cmap="inferno", diverging=False, norm=None):
@@ -69,8 +72,8 @@ GRF_RNG = np.random.default_rng(7)
 print("=== Section 1: power-law GRFs ===")
 grfs = []
 for alpha in ALPHA_VALUES:
-    psd = powerlaw_psd(instrument, alpha)
-    field = grf_from_psd(instrument, psd, rng=np.random.default_rng(7))
+    psd = powerlaw_psd(grid, alpha)
+    field = grf_from_psd(N_PIX, psd, rng=np.random.default_rng(7))
     grfs.append(field)
     print(f"  alpha={alpha:.1f}  std={float(np.std(field)):.3f}")
 
@@ -100,7 +103,7 @@ nebula_grid = []
 for exp in nebula_exponents:
     row = []
     for pct in nebula_percentiles:
-        img = nebula(instrument, exponent=exp, percentile=pct)
+        img = nebula(grid, N_PIX, exponent=exp, percentile=pct)
         row.append(img)
         print(f"    α={exp:.1f}  p={pct:.0f}%  "
               f"nonzero={float(np.mean(img > 0)):.2%}")
@@ -118,7 +121,8 @@ for exp_lf in se_exponents_lf:
     row = []
     for vmin in se_vmin_hf:
         img = sharp_edges_object(
-            instrument,
+            grid,
+            n_pix=N_PIX,
             exponent_lf=exp_lf,
             percentile_lf=SE_PCT_LF,
             exponent_hf=SE_EXP_HF,
@@ -138,7 +142,7 @@ ps_grid = []
 for n in ps_n_values:
     row = []
     for exp in ps_exponents:
-        img = point_sources(instrument, n=n, exponent=exp)
+        img = point_sources(grid, N_PIX, n=n, exponent=exp)
         row.append(img)
         print(f"    n={n:3d}  α={exp:.1f}  max={float(np.max(img)):.1f}")
     ps_grid.append(row)
@@ -189,59 +193,59 @@ if HAS_MPL:
 # ======================================================================
 # Section 3 — Full composite images with random parameters
 # ======================================================================
+if GENERATE_COMPOSITES:
+    SKY_CONFIG = {
+        # object-type sampling weights: (nebula, point_sources, sharp_edges_object)
+        "object_type_weights": (1.0, 1.0, 0.0),
+        "n_objects_min": 1,
+        "n_objects_max": 5,
+        "nebula_exponent_min": 1.5,
+        "nebula_exponent_max": 3.0,
+        "nebula_percentile_min": 90.0,
+        "nebula_percentile_max": 99.0,
+        "point_sources_n_min": 1,
+        "point_sources_n_max": 100,
+        "point_sources_exponent_min": 1.5,
+        "point_sources_exponent_max": 3.5,
+        "sharp_edges_exponent_lf_min": 1.5,
+        "sharp_edges_exponent_lf_max": 5.0,
+        "sharp_edges_percentile_lf_min": 50.0,
+        "sharp_edges_percentile_lf_max": 99.0,
+        "sharp_edges_exponent_hf_min": 1.5,
+        "sharp_edges_exponent_hf_max": 5.0,
+        "sharp_edges_vmin_hf_min": 0.0,
+        "sharp_edges_vmin_hf_max": 1.0,
+    }
 
-SKY_CONFIG = {
-    # object-type sampling weights: (nebula, point_sources, sharp_edges_object)
-    "object_type_weights": (1.0, 1.0, 1.0),
-    "n_objects_min": 1,
-    "n_objects_max": 5,
-    "nebula_exponent_min": 1.5,
-    "nebula_exponent_max": 5.0,
-    "nebula_percentile_min": 50.0,
-    "nebula_percentile_max": 99.0,
-    "point_sources_n_min": 1,
-    "point_sources_n_max": 50,
-    "point_sources_exponent_min": 1.5,
-    "point_sources_exponent_max": 3.5,
-    "sharp_edges_exponent_lf_min": 1.5,
-    "sharp_edges_exponent_lf_max": 5.0,
-    "sharp_edges_percentile_lf_min": 50.0,
-    "sharp_edges_percentile_lf_max": 99.0,
-    "sharp_edges_exponent_hf_min": 1.5,
-    "sharp_edges_exponent_hf_max": 5.0,
-    "sharp_edges_vmin_hf_min": 0.0,
-    "sharp_edges_vmin_hf_max": 1.0,
-}
+    N_COMPOSITES = 6
+    rng_comp = np.random.default_rng(42)
 
-N_COMPOSITES = 6
-rng_comp = np.random.default_rng(42)
+    print("=== Section 3: composite images ===")
+    composites = []
+    for i in range(N_COMPOSITES):
+        funcs, params, fluxes = draw_random_image_parameters(**SKY_CONFIG, rng=rng_comp)
+        img = image_generator(grid, N_PIX, funcs, params, fluxes)
+        composites.append((img, [f.__name__ for f in funcs]))
+        obj_names = [f.__name__ for f in funcs]
+        print(f"  [{i+1}] {obj_names}  "
+            f"mean={float(np.mean(img)):.4f}  max={float(np.max(img)):.2f}")
 
-print("=== Section 3: composite images ===")
-composites = []
-for i in range(N_COMPOSITES):
-    funcs, params, fluxes = draw_random_image_parameters(**SKY_CONFIG, rng=rng_comp)
-    img = image_generator(instrument, funcs, params, fluxes)
-    composites.append((img, [f.__name__ for f in funcs]))
-    obj_names = [f.__name__ for f in funcs]
-    print(f"  [{i+1}] {obj_names}  "
-          f"mean={float(np.mean(img)):.4f}  max={float(np.max(img)):.2f}")
+    if HAS_MPL:
+        from matplotlib.colors import LogNorm
 
-if HAS_MPL:
-    from matplotlib.colors import LogNorm
+        fig, axes = plt.subplots(2, 3, figsize=(10, 7))
+        for ax, (img, names) in zip(axes.flat, composites):
+            vmax = float(np.max(img))
+            vmin = vmax * 1e-5
+            norm = LogNorm(vmin=vmin, vmax=vmax)
+            _show(ax, np.clip(img, vmin, None), title=" + ".join(names), norm=norm)
+        fig.suptitle("Composite sky images — random parameters (log scale)", fontsize=12)
+        plt.tight_layout()
+        out = os.path.join(OUT_DIR, "example_composites.png")
+        plt.savefig(out, dpi=120)
+        print(f"Saved {out}\n")
 
-    fig, axes = plt.subplots(2, 3, figsize=(10, 7))
-    for ax, (img, names) in zip(axes.flat, composites):
-        vmax = float(np.max(img))
-        vmin = vmax * 1e-5
-        norm = LogNorm(vmin=vmin, vmax=vmax)
-        _show(ax, np.clip(img, vmin, None), title=" + ".join(names), norm=norm)
-    fig.suptitle("Composite sky images — random parameters (log scale)", fontsize=12)
-    plt.tight_layout()
-    out = os.path.join(OUT_DIR, "example_composites.png")
-    plt.savefig(out, dpi=120)
-    print(f"Saved {out}\n")
+    print("Done.")
 
-print("Done.")
-
-if HAS_MPL:
-    plt.show()
+    if HAS_MPL:
+        plt.show()

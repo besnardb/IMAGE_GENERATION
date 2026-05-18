@@ -12,9 +12,10 @@ to ``ao_instru.n_pix × ao_instru.n_pix``.
 from __future__ import annotations
 
 import numpy as np
+import cupy as cp
 
-from .array_backend import is_cupy_array as _is_cupy_array
-from .array_backend import get_xp_from_array as _get_xp
+from array_backend import is_cupy_array
+from array_backend import get_xp_from_array as _get_xp
 
 
 def _normalize_mean(image, xp):
@@ -24,58 +25,32 @@ def _normalize_mean(image, xp):
 		return image / mean_val
 	return xp.ones_like(image)
 
+def make_grid(n_pix: int, use_cupy: bool = False, device_id: int = 0):
+	xp = cp if use_cupy else np
+	if use_cupy:
+		device = cp.cuda.Device(device_id)
+		device.use()
+		print('Using device: ', cp.cuda.runtime.getDeviceProperties(device)['name'])
+	n_large = n_pix * 2
+	fx = xp.fft.fftfreq(n_large, d=1.0)
+	fy = xp.fft.fftfreq(n_large, d=1.0)
+	fx_large, fy_large = xp.meshgrid(fx, fy)
+	fr_pix_large = xp.sqrt(fx_large ** 2 + fy_large ** 2)
+
+	return fr_pix_large
 
 # ---------------------------------------------------------------------------
 # PSD functions  (all work on the 2N×2N ``fr_pix_large`` grid)
 # ---------------------------------------------------------------------------
 
-def gaussian_psd(ao_instru, std0_pix: float):
-	"""Gaussian PSD: P(k) = exp(-k² / (2 σ₀²)).
 
-	Parameters
-	----------
-	ao_instru : SkyInstrument
-		Instrument object providing ``fr_pix_large`` and ``xp``.
-	std0_pix : float
-		Characteristic width in cycles-per-pixel.
-
-	Returns
-	-------
-	ndarray
-		2D PSD array with shape ``(2*n_pix, 2*n_pix)``.
-	"""
-	xp = getattr(ao_instru, "xp", np)
-	k = ao_instru.fr_pix_large
-	return xp.exp(-k ** 2 / (2.0 * std0_pix ** 2))
-
-
-def exponential_psd(ao_instru, k0_pix: float):
-	"""Exponential PSD: P(k) = exp(-k / k₀).
-
-	Parameters
-	----------
-	ao_instru : SkyInstrument
-		Instrument object providing ``fr_pix_large`` and ``xp``.
-	k0_pix : float
-		Characteristic frequency in cycles-per-pixel.
-
-	Returns
-	-------
-	ndarray
-		2D PSD array with shape ``(2*n_pix, 2*n_pix)``.
-	"""
-	xp = getattr(ao_instru, "xp", np)
-	k = ao_instru.fr_pix_large
-	return xp.exp(-k / k0_pix)
-
-
-def powerlaw_psd(ao_instru, alpha: float):
+def powerlaw_psd(grid, alpha: float):
 	"""Power-law PSD: P(k) ∝ k^{-α}  (DC set to 0).
 
 	Parameters
 	----------
-	ao_instru : SkyInstrument
-		Instrument object providing ``fr_pix_large`` and ``xp``.
+	grid : ndarray
+		2D frequency grid with shape ``(2*n_pix, 2*n_pix)``.
 	alpha : float
 		Power-law exponent (positive → red spectrum).
 
@@ -84,8 +59,8 @@ def powerlaw_psd(ao_instru, alpha: float):
 	ndarray
 		2D PSD array with shape ``(2*n_pix, 2*n_pix)``.
 	"""
-	xp = getattr(ao_instru, "xp", np)
-	k = ao_instru.fr_pix_large
+	xp = cp if is_cupy_array(grid) else np
+	k = grid
 	psd = xp.zeros_like(k, dtype=xp.float64)
 	mask = k > 0
 	psd[mask] = k[mask] ** (-alpha)
@@ -96,7 +71,7 @@ def powerlaw_psd(ao_instru, alpha: float):
 # GRF sampler
 # ---------------------------------------------------------------------------
 
-def grf_from_psd(ao_instru, psd, *, rng=None):
+def grf_from_psd(n_pix, psd, *, rng=None):
 	"""Draw a Gaussian random field realisation from a 2D PSD.
 
 	The field is generated on the 2N × 2N grid (matching ``fr_pix_large``)
@@ -104,9 +79,8 @@ def grf_from_psd(ao_instru, psd, *, rng=None):
 
 	Parameters
 	----------
-	ao_instru : SkyInstrument
-		Instrument object providing ``n_pix``, ``xp``, and the large
-		frequency grid shape.
+	n_pix : int
+		Number of pixels in each dimension of the output image.
 	psd : ndarray
 		2D PSD array of shape ``(2*n_pix, 2*n_pix)``.
 	rng : numpy.random.Generator or None, optional
@@ -119,7 +93,6 @@ def grf_from_psd(ao_instru, psd, *, rng=None):
 	"""
 	xp = _get_xp(psd)
 	n_large = psd.shape[0]
-	n_pix = ao_instru.n_pix
 
 	# Draw complex white noise in Fourier space
 	if rng is None:
@@ -148,13 +121,16 @@ def grf_from_psd(ao_instru, psd, *, rng=None):
 # Astronomical object generators
 # ---------------------------------------------------------------------------
 
-def nebula(ao_instru, exponent: float, percentile: float):
+def nebula(grid, n_pix: int, exponent: float, percentile: float):
 	"""Generate a nebula-like object via a thresholded power-law GRF.
 
 	Parameters
 	----------
-	ao_instru : SkyInstrument
+	grid : ndarray
+		2D frequency grid with shape ``(2*n_pix, 2*n_pix)``.
 		Instrument providing frequency grids and backend.
+	n_pix : int
+		Number of pixels in each dimension of the output image.
 	exponent : float
 		Power-law exponent for the PSD.
 	percentile : float
@@ -166,9 +142,9 @@ def nebula(ao_instru, exponent: float, percentile: float):
 	ndarray
 		2D image of shape ``(n_pix, n_pix)`` with values ≥ 0.
 	"""
-	xp = getattr(ao_instru, "xp", np)
-	psd = powerlaw_psd(ao_instru, exponent)
-	field = grf_from_psd(ao_instru, psd)
+	xp = cp if is_cupy_array(grid) else np
+	psd = powerlaw_psd(grid, exponent)
+	field = grf_from_psd(n_pix, psd)
 
 	# Threshold at the requested percentile
 	if xp is not np:
@@ -180,7 +156,7 @@ def nebula(ao_instru, exponent: float, percentile: float):
 	return _normalize_mean(image, xp)
 
 
-def point_sources(ao_instru, n: int, exponent: float):
+def point_sources(grid, n_pix: int, n: int, exponent: float):
 	"""Generate a field of random point sources.
 
 	Each source is a single bright pixel placed at a random position.
@@ -188,8 +164,10 @@ def point_sources(ao_instru, n: int, exponent: float):
 
 	Parameters
 	----------
-	ao_instru : SkyInstrument
-		Instrument providing ``n_pix`` and backend.
+	grid : ndarray
+		2D frequency grid with shape ``(2*n_pix, 2*n_pix)``.
+	n_pix : int
+		Number of pixels in each dimension of the output image.
 	n : int
 		Number of point sources.
 	exponent : float
@@ -201,8 +179,7 @@ def point_sources(ao_instru, n: int, exponent: float):
 	ndarray
 		2D image of shape ``(n_pix, n_pix)``.
 	"""
-	xp = getattr(ao_instru, "xp", np)
-	n_pix = ao_instru.n_pix
+	xp = cp if is_cupy_array(grid) else np
 	image = xp.zeros((n_pix, n_pix), dtype=xp.float64)
 
 	n = int(n)
@@ -232,7 +209,8 @@ def point_sources(ao_instru, n: int, exponent: float):
 
 
 def sharp_edges_object(
-	ao_instru,
+	grid,
+	n_pix: int,
 	exponent_lf: float,
 	percentile_lf: float,
 	exponent_hf: float,
@@ -245,8 +223,10 @@ def sharp_edges_object(
 
 	Parameters
 	----------
-	ao_instru : SkyInstrument
-		Instrument providing frequency grids and backend.
+	grid : ndarray
+		2D frequency grid with shape ``(2*n_pix, 2*n_pix)``.
+	n_pix : int
+		Number of pixels in each dimension of the output image.
 	exponent_lf : float
 		Power-law exponent for the low-frequency (shape) component.
 	percentile_lf : float
@@ -262,11 +242,11 @@ def sharp_edges_object(
 	ndarray
 		2D image of shape ``(n_pix, n_pix)`` with values ≥ 0.
 	"""
-	xp = getattr(ao_instru, "xp", np)
+	xp = cp if is_cupy_array(grid) else np
 
 	# Low-frequency shape mask
-	psd_lf = powerlaw_psd(ao_instru, exponent_lf)
-	field_lf = grf_from_psd(ao_instru, psd_lf)
+	psd_lf = powerlaw_psd(grid, exponent_lf)
+	field_lf = grf_from_psd(n_pix, psd_lf)
 
 	if xp is not np:
 		thresh_lf = float(xp.percentile(field_lf, percentile_lf))
@@ -276,8 +256,8 @@ def sharp_edges_object(
 	mask = (field_lf >= thresh_lf).astype(xp.float64)
 
 	# High-frequency texture
-	psd_hf = powerlaw_psd(ao_instru, exponent_hf)
-	field_hf = grf_from_psd(ao_instru, psd_hf)
+	psd_hf = powerlaw_psd(grid, exponent_hf)
+	field_hf = grf_from_psd(n_pix, psd_hf)
 
 	# Normalise texture to [0, 1]
 	hf_min = float(xp.min(field_hf))

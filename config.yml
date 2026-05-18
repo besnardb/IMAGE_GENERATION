@@ -1,0 +1,41 @@
+general:
+  use_gpus: true
+  device_id: 7
+  n_seed: 12
+  n_pix: 1024
+  n_images: 10
+  n_objects_min: 2
+  n_objects_max: 5
+  output_dir: "./output"
+
+sky:
+  nebula:
+    weight: 0.75
+    flux_min: 0.002
+    flux_max: 0.02
+    exponent_min: 2.5
+    exponent_max: 3.0
+    percentile_min: 97.0
+    percentile_max: 99.0
+
+  point_sources:
+    weight: 1.0
+    flux_min: 0.04
+    flux_max: 0.08
+    n_min: 20
+    n_max: 100
+    exponent_min: 1.5
+    exponent_max: 3.5
+
+  sharp_edges:
+    weight: 0.0
+    flux_min: 0.002
+    flux_max: 0.03
+    exponent_lf_min: 1.5
+    exponent_lf_max: 5.0
+    percentile_lf_min: 50.0
+    percentile_lf_max: 99.0
+    exponent_hf_min: 1.5
+    exponent_hf_max: 5.0
+    vmin_hf_min: 0.0
+    vmin_hf_max: 1.0

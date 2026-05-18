@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .gaussian_random_fields import nebula, point_sources, sharp_edges_object
-from .random_compat import rng_random as _rng_random
+from gaussian_random_fields import nebula, point_sources, sharp_edges_object
+from random_compat import rng_random as _rng_random
 
 
 def draw_n_objects(
@@ -31,7 +31,7 @@ def draw_n_objects(
 	return val_int
 
 
-def draw_random_object_function(*, weights=None, rng=None):
+def draw_random_object_function(cfg, rng=None):
 	"""Draw a random sky object generator function.
 
 	Parameters
@@ -42,16 +42,17 @@ def draw_random_object_function(*, weights=None, rng=None):
 		are used.
 	"""
 	functions = (nebula, point_sources, sharp_edges_object)
-	if weights is None:
-		w = np.ones(len(functions))
-	else:
-		w = np.asarray(weights, dtype=float)
-		if w.shape != (len(functions),):
-			raise ValueError(
-				f"weights must have length {len(functions)}, got {len(w)}"
-			)
-		if np.any(w < 0):
-			raise ValueError("weights must be non-negative")
+	w = np.array([
+		cfg.sky.nebula.weight,
+		cfg.sky.point_sources.weight,
+		cfg.sky.sharp_edges.weight,
+	], dtype=float)
+	if w.shape != (len(functions),):
+		raise ValueError(
+			f"weights must have length {len(functions)}, got {len(w)}"
+		)
+	if np.any(w < 0):
+		raise ValueError("weights must be non-negative")
 	w = w / w.sum()
 	cumw = np.cumsum(w)
 	if rng is None:
@@ -173,30 +174,20 @@ def draw_uniform_fluxes(
 	return np.asarray(_rng_random(rng, size=(n,)))
 
 
+def draw_log_uniform_flux(flux_min: float, flux_max: float, rng=None) -> float:
+	"""Draw a single log-uniform flux in [flux_min, flux_max]."""
+	if rng is None:
+		u = np.random.random()
+	else:
+		u = float(_rng_random(rng))
+	log_min = np.log(flux_min)
+	log_max = np.log(flux_max)
+	return float(np.exp(log_min + (log_max - log_min) * u))
+
+
 def draw_random_image_parameters(
+	cfg,
 	*,
-	n_objects_min: int = 1,
-	n_objects_max: int = 20,
-	object_type_weights=None,
-	# nebula ranges
-	nebula_exponent_min: float = 1.5,
-	nebula_exponent_max: float = 5.0,
-	nebula_percentile_min: float = 50.0,
-	nebula_percentile_max: float = 99.0,
-	# point_sources ranges
-	point_sources_n_min: int = 1,
-	point_sources_n_max: int = 1000,
-	point_sources_exponent_min: float = 1.5,
-	point_sources_exponent_max: float = 3.5,
-	# sharp_edges ranges
-	sharp_edges_exponent_lf_min: float = 1.5,
-	sharp_edges_exponent_lf_max: float = 5.0,
-	sharp_edges_percentile_lf_min: float = 50.0,
-	sharp_edges_percentile_lf_max: float = 99.0,
-	sharp_edges_exponent_hf_min: float = 1.5,
-	sharp_edges_exponent_hf_max: float = 5.0,
-	sharp_edges_vmin_hf_min: float = 0.0,
-	sharp_edges_vmin_hf_max: float = 1.0,
 	rng=None,
 ):
 	"""Draw random parameters for image_generator.
@@ -204,47 +195,83 @@ def draw_random_image_parameters(
 	All min/max ranges are forwarded to the individual draw functions.
 	"""
 	n_objects = draw_n_objects(
-		n_objects_min=n_objects_min,
-		n_objects_max=n_objects_max,
+		n_objects_min=cfg.general.n_objects_min,
+		n_objects_max=cfg.general.n_objects_max,
 		rng=rng,
 	)
 
 	function_list = []
 	params_list = []
 
-	for _ in range(n_objects):
-		func = draw_random_object_function(weights=object_type_weights, rng=rng)
-		function_list.append(func)
+	# Always include mandatory object types first.
+	mandatory_map = [
+		(nebula, cfg.sky.nebula),
+		(point_sources, cfg.sky.point_sources),
+		(sharp_edges_object, cfg.sky.sharp_edges),
+	]
+	mandatory_functions = [
+		func for func, section in mandatory_map
+		if getattr(section, 'weight', 0.0) >= 1.0
+	]
+
+	def _draw_params(func):
 		if func is nebula:
-			params_list.append(draw_nebula_params(
-				exponent_min=nebula_exponent_min,
-				exponent_max=nebula_exponent_max,
-				percentile_min=nebula_percentile_min,
-				percentile_max=nebula_percentile_max,
+			return draw_nebula_params(
+				exponent_min=cfg.sky.nebula.exponent_min,
+				exponent_max=cfg.sky.nebula.exponent_max,
+				percentile_min=cfg.sky.nebula.percentile_min,
+				percentile_max=cfg.sky.nebula.percentile_max,
 				rng=rng,
-			))
+			)
 		elif func is point_sources:
-			params_list.append(draw_point_sources_params(
-				n_min=point_sources_n_min,
-				n_max=point_sources_n_max,
-				exponent_min=point_sources_exponent_min,
-				exponent_max=point_sources_exponent_max,
+			return draw_point_sources_params(
+				n_min=cfg.sky.point_sources.n_min,
+				n_max=cfg.sky.point_sources.n_max,
+				exponent_min=cfg.sky.point_sources.exponent_min,
+				exponent_max=cfg.sky.point_sources.exponent_max,
 				rng=rng,
-			))
+			)
 		elif func is sharp_edges_object:
-			params_list.append(draw_sharp_edges_params(
-				exponent_lf_min=sharp_edges_exponent_lf_min,
-				exponent_lf_max=sharp_edges_exponent_lf_max,
-				percentile_lf_min=sharp_edges_percentile_lf_min,
-				percentile_lf_max=sharp_edges_percentile_lf_max,
-				exponent_hf_min=sharp_edges_exponent_hf_min,
-				exponent_hf_max=sharp_edges_exponent_hf_max,
-				vmin_hf_min=sharp_edges_vmin_hf_min,
-				vmin_hf_max=sharp_edges_vmin_hf_max,
+			return draw_sharp_edges_params(
+				exponent_lf_min=cfg.sky.sharp_edges.exponent_lf_min,
+				exponent_lf_max=cfg.sky.sharp_edges.exponent_lf_max,
+				percentile_lf_min=cfg.sky.sharp_edges.percentile_lf_min,
+				percentile_lf_max=cfg.sky.sharp_edges.percentile_lf_max,
+				exponent_hf_min=cfg.sky.sharp_edges.exponent_hf_min,
+				exponent_hf_max=cfg.sky.sharp_edges.exponent_hf_max,
+				vmin_hf_min=cfg.sky.sharp_edges.vmin_hf_min,
+				vmin_hf_max=cfg.sky.sharp_edges.vmin_hf_max,
 				rng=rng,
-			))
+			)
 		else:
 			raise ValueError("Unknown object function selected")
 
-	flux_list = draw_uniform_fluxes(n=n_objects, rng=rng)
+	def _draw_flux(func):
+		if func is nebula:
+			return draw_log_uniform_flux(
+				cfg.sky.nebula.flux_min, cfg.sky.nebula.flux_max, rng=rng
+			)
+		elif func is point_sources:
+			return draw_log_uniform_flux(
+				cfg.sky.point_sources.flux_min, cfg.sky.point_sources.flux_max, rng=rng
+			)
+		elif func is sharp_edges_object:
+			return draw_log_uniform_flux(
+				cfg.sky.sharp_edges.flux_min, cfg.sky.sharp_edges.flux_max, rng=rng
+			)
+		else:
+			raise ValueError("Unknown object function selected")
+
+	for func in mandatory_functions:
+		function_list.append(func)
+		params_list.append(_draw_params(func))
+
+	n_random = max(0, n_objects - len(mandatory_functions))
+	for _ in range(n_random):
+		func = draw_random_object_function(cfg, rng=rng)
+		function_list.append(func)
+		params_list.append(_draw_params(func))
+
+	flux_list = [_draw_flux(func) for func in function_list]
+
 	return function_list, params_list, flux_list

@@ -2,20 +2,17 @@
 
 Public API
 ----------
-SkyInstrument
-    Minimal instrument stub (n_pix, xp, fr_pix_large).
 
 draw_random_image_parameters(**ranges, rng)
     Draw random object functions, parameters, and flux weights.
 
-image_generator(ao_instru, function_list, params_list, flux_list)
+image_generator(grid, n_pix, function_list, params_list, flux_list)
     Combine objects into a single normalised sky image.
 
 Individual object generators
     nebula, point_sources, sharp_edges_object
 """
 
-from .sky_instrument import SkyInstrument
 from .random_sky_parameters import (
     draw_random_image_parameters,
     draw_n_objects,
@@ -27,6 +24,7 @@ from .random_sky_parameters import (
 )
 from .image_generator import image_generator
 from .gaussian_random_fields import (
+    make_grid,
     nebula,
     point_sources,
     sharp_edges_object,
@@ -37,7 +35,6 @@ from .gaussian_random_fields import (
 )
 
 __all__ = [
-    "SkyInstrument",
     "draw_random_image_parameters",
     "draw_n_objects",
     "draw_random_object_function",
@@ -46,6 +43,7 @@ __all__ = [
     "draw_sharp_edges_params",
     "draw_uniform_fluxes",
     "image_generator",
+    "make_grid",
     "nebula",
     "point_sources",
     "sharp_edges_object",

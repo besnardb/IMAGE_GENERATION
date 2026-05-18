@@ -1,0 +1,58 @@
+import os
+import argparse
+from utils import load_config
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
+
+from random_sky_parameters import draw_random_image_parameters
+from image_generator import generate_image_from_components
+from gaussian_random_fields import make_grid
+from utils import np_to_fits, _show
+
+def make_compsite_image(cfg, grid):
+    rng_comp = np.random.default_rng(cfg.general.n_seed)
+    composites = []
+    for i in range(cfg.general.n_images):
+        funcs, params, fluxes = draw_random_image_parameters(cfg, rng=rng_comp)
+        img = generate_image_from_components(
+            grid, cfg.general.n_pix, funcs, params, fluxes,
+        )
+        composites.append((img, [f.__name__ for f in funcs]))
+        obj_names = [f.__name__ for f in funcs]
+        print(f"  [{i+1}] {obj_names}  "
+            f"mean={float(np.mean(img)):.4f}  max={float(np.max(img)):.2f}")
+
+        out = os.path.join(cfg.general.output_dir, f"composite_{i+1}.fits")
+        np_to_fits(img, out)
+
+    fig, axes = plt.subplots(2, 3, figsize=(10, 7))
+    for ax, (img, names) in zip(axes.flat, composites):
+        vmax = float(np.max(img))
+        vmin = vmax * 1e-5
+        norm = LogNorm(vmin=vmin, vmax=vmax)
+        _show(ax, np.clip(img, vmin, None), title=" + ".join(names), norm=norm)
+    fig.suptitle("Composite sky images — random parameters (log scale)", fontsize=12)
+    plt.tight_layout()
+    OUT_DIR = cfg.general.output_dir
+    out = os.path.join(OUT_DIR, "preview_composites.png")
+    plt.savefig(out, dpi=120)
+    print(f"Saved {out}\n")
+
+def main(cfg):
+    grid = make_grid(cfg.general.n_pix, cfg.general.use_gpus, cfg.general.device_id)
+    make_compsite_image(cfg, grid)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config", type=str, default=None, help="Path to YAML config file"
+    )
+    args = parser.parse_args()
+    cfg = load_config(args.config)
+
+    use_gpus = bool(cfg.general.use_gpus)
+    print(f"Running generation on GPU")
+
+    main(cfg)
