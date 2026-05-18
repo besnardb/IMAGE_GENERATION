@@ -6,6 +6,7 @@ general:
   n_images: 10
   n_objects_min: 2
   n_objects_max: 5
+  generate_previews: true
   output_dir: "./output"
 
 sky:

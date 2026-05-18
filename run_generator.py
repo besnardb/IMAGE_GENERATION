@@ -25,7 +25,11 @@ def make_compsite_image(cfg, grid):
 
         out = os.path.join(cfg.general.output_dir, f"composite_{i+1}.fits")
         np_to_fits(img, out)
+    
+    if cfg.general.generate_previews:
+        generate_preview_composite_image(cfg, composites)
 
+def generate_preview_composite_image(cfg, composites):
     fig, axes = plt.subplots(2, 3, figsize=(10, 7))
     for ax, (img, names) in zip(axes.flat, composites):
         vmax = float(np.max(img))

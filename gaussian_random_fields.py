@@ -32,9 +32,9 @@ def make_grid(n_pix: int, use_cupy: bool = False, device_id: int = 0):
 		device.use()
 		print('Using device: ', cp.cuda.runtime.getDeviceProperties(device)['name'])
 	n_large = n_pix * 2
-	fx = xp.fft.fftfreq(n_large, d=1.0)
-	fy = xp.fft.fftfreq(n_large, d=1.0)
-	fx_large, fy_large = xp.meshgrid(fx, fy)
+	fx = xp.fft.fftfreq(n_large, d=1.0)        # shape (2N,)
+	fy = xp.fft.rfftfreq(n_large, d=1.0)       # shape (N+1,)
+	fx_large, fy_large = xp.meshgrid(fx, fy, indexing='ij')
 	fr_pix_large = xp.sqrt(fx_large ** 2 + fy_large ** 2)
 
 	return fr_pix_large
@@ -82,7 +82,8 @@ def grf_from_psd(n_pix, psd, *, rng=None):
 	n_pix : int
 		Number of pixels in each dimension of the output image.
 	psd : ndarray
-		2D PSD array of shape ``(2*n_pix, 2*n_pix)``.
+		2D PSD array of shape ``(2*n_pix, n_pix+1)`` (half-spectrum from
+		``make_grid``).
 	rng : numpy.random.Generator or None, optional
 		Random number generator.  If *None*, ``numpy.random`` is used.
 
@@ -92,28 +93,37 @@ def grf_from_psd(n_pix, psd, *, rng=None):
 		Real-valued 2D array of shape ``(n_pix, n_pix)``.
 	"""
 	xp = _get_xp(psd)
-	n_large = psd.shape[0]
+	n_large = psd.shape[0]  # = 2 * n_pix
 
-	# Draw complex white noise in Fourier space
+	# Draw real white noise in pixel space — avoids a 6 GB complex array.
 	if rng is None:
-		noise_np = np.random.standard_normal((n_large, n_large)) \
-			+ 1j * np.random.standard_normal((n_large, n_large))
+		noise_np = np.random.standard_normal((n_large, n_large))
 	else:
-		noise_np = rng.standard_normal((n_large, n_large)) \
-			+ 1j * rng.standard_normal((n_large, n_large))
+		noise_np = rng.standard_normal((n_large, n_large))
 
 	if xp is not np:
 		noise = xp.asarray(noise_np)
+		del noise_np  # free CPU buffer as soon as GPU copy is made
 	else:
 		noise = noise_np
 
-	# Colour the noise
-	field_fft = xp.sqrt(psd) * noise
-	field_large = xp.real(xp.fft.ifft2(field_fft))
+	# Forward real FFT → half-spectrum, same shape as psd.
+	noise_fft = xp.fft.rfft2(noise)           # shape: (n_large, n_large//2+1)
+	del noise  # free the (2N×2N) real array — no longer needed
+
+	# sqrt in-place on psd to avoid a separate sqrt_psd allocation.
+	xp.sqrt(psd, out=psd)
+	field_fft = psd * noise_fft
+	del noise_fft  # free (2N×(N+1)) complex array
+
+	# Inverse real FFT → guaranteed real output, no .real() needed.
+	field_large = xp.fft.irfft2(field_fft, s=(n_large, n_large))
+	del field_fft  # free (2N×(N+1)) complex array
 
 	# Centre-crop to n_pix × n_pix
 	start = (n_large - n_pix) // 2
-	field = field_large[start:start + n_pix, start:start + n_pix]
+	field = field_large[start:start + n_pix, start:start + n_pix].copy()
+	del field_large
 	return field
 
 
@@ -145,6 +155,7 @@ def nebula(grid, n_pix: int, exponent: float, percentile: float):
 	xp = cp if is_cupy_array(grid) else np
 	psd = powerlaw_psd(grid, exponent)
 	field = grf_from_psd(n_pix, psd)
+	del psd
 
 	# Threshold at the requested percentile
 	if xp is not np:
@@ -152,8 +163,10 @@ def nebula(grid, n_pix: int, exponent: float, percentile: float):
 	else:
 		thresh = float(np.percentile(field, percentile))
 
-	image = xp.clip(field - thresh, 0.0, None)
-	return _normalize_mean(image, xp)
+	# In-place subtract + clip — avoids allocating a temporary (N×N) array.
+	field -= thresh
+	xp.clip(field, 0.0, None, out=field)
+	return _normalize_mean(field, xp)
 
 
 def point_sources(grid, n_pix: int, n: int, exponent: float):
@@ -180,11 +193,10 @@ def point_sources(grid, n_pix: int, n: int, exponent: float):
 		2D image of shape ``(n_pix, n_pix)``.
 	"""
 	xp = cp if is_cupy_array(grid) else np
-	image = xp.zeros((n_pix, n_pix), dtype=xp.float64)
 
 	n = int(n)
 	if n < 1:
-		return image
+		return xp.zeros((n_pix, n_pix), dtype=xp.float64)
 
 	# Random positions (CPU, then transfer if needed)
 	ys = np.random.randint(0, n_pix, size=n)
@@ -197,13 +209,9 @@ def point_sources(grid, n_pix: int, n: int, exponent: float):
 	brightnesses = u ** (-1.0 / (alpha - 1.0))
 	brightnesses /= brightnesses.max()  # normalise to [0, 1]
 
-	if xp is not np:
-		brightnesses_xp = xp.asarray(brightnesses)
-		for i in range(n):
-			image[int(ys[i]), int(xs[i])] += float(brightnesses_xp[i])
-	else:
-		for i in range(n):
-			image[int(ys[i]), int(xs[i])] += brightnesses[i]
+	image_np = np.zeros((n_pix, n_pix), dtype=np.float64)
+	np.add.at(image_np, (ys, xs), brightnesses)
+	image = xp.asarray(image_np) if xp is not np else image_np
 
 	return _normalize_mean(image, xp)
 
