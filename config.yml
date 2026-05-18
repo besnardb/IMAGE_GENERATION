@@ -1,7 +1,7 @@
 general:
   use_gpus: true
   device_id: 7
-  n_seed: 12
+  n_seed: 1489
   n_pix: 1024
   n_images: 10
   n_objects_min: 2
@@ -11,18 +11,18 @@ general:
 
 sky:
   nebula:
-    weight: 0.75
-    flux_min: 0.002
-    flux_max: 0.02
-    exponent_min: 2.5
-    exponent_max: 3.0
-    percentile_min: 97.0
+    weight: 0.8
+    flux_min: 0.001
+    flux_max: 0.005
+    exponent_min: 3.0
+    exponent_max: 4.5
+    percentile_min: 98.0
     percentile_max: 99.0
 
   point_sources:
     weight: 1.0
     flux_min: 0.04
-    flux_max: 0.08
+    flux_max: 0.1
     n_min: 20
     n_max: 100
     exponent_min: 1.5
