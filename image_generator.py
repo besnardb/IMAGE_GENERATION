@@ -80,6 +80,7 @@ def generate_image_from_components(
 				obj = func(grid, n_pix, *params)
 			else:
 				obj = func(grid, n_pix, params)
+			del func, params  # free memory if using CuPy
 
 			# Validate
 			obj_sum = float(xp.sum(obj))

@@ -21,7 +21,7 @@ def make_compsite_image(cfg, grid):
         composites.append((img, [f.__name__ for f in funcs]))
         obj_names = [f.__name__ for f in funcs]
         print(f"  [{i+1}] {obj_names}  "
-            f"mean={float(np.mean(img)):.4f}  max={float(np.max(img)):.2f}")
+            f"mean={float(np.mean(img)):.4f}  max={float(np.max(img)):.2f}", flush=True)
 
         out = os.path.join(cfg.general.output_dir, f"composite_{i+1}.fits")
         np_to_fits(img, out)

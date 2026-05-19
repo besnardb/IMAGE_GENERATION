@@ -31,8 +31,8 @@ def create_new_header(image_size):
     hdr["WCSAXES"] = 2
     hdr["CRPIX1"] = (image_size + 1) / 2.0
     hdr["CRPIX2"] = (image_size + 1) / 2.0
-    hdr["CDELT1"] = 0
-    hdr["CDELT2"] = 0
+    hdr["CDELT1"] = -0.00041666666666667 # define pixel size
+    hdr["CDELT2"] = 0.00041666666666667 # define pixel size
     hdr["UNIT1"] = 'deg' 
     hdr["UNIT2"] = 'deg' 
     hdr["CTYPE1"] = 'RA---SIN'
