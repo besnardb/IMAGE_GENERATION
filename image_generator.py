@@ -88,6 +88,7 @@ def generate_image_from_components(
 			obj_sum = float(xp.sum(obj))
 			if obj_sum > 0.0 and not xp.isnan(obj_sum):
 				break
+			del obj_sum  # free memory if using CuPy
 		else:
 			# All attempts failed – skip this object
 			continue
@@ -97,6 +98,6 @@ def generate_image_from_components(
 		print("DEBUG 6", flush=True)
 		if obj_max > 0.0:
 			composite += flux * (obj / obj_max)
-			print("DEBUG 7", flush=True)
+		del obj, obj_max  # free memory if using CuPy
 
 	return composite
