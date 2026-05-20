@@ -95,30 +95,34 @@ def grf_from_psd(n_pix, psd, *, rng=None):
 	xp = _get_xp(psd)
 	n_large = psd.shape[0]  # = 2 * n_pix
 
-	# Draw real white noise in pixel space — avoids a 6 GB complex array.
-	if rng is None:
-		noise_np = np.random.standard_normal((n_large, n_large))
-	else:
-		noise_np = rng.standard_normal((n_large, n_large))
-
 	if xp is not np:
-		noise = xp.asarray(noise_np)
-		del noise_np  # free CPU buffer as soon as GPU copy is made
+		# Generate complex noise directly on the GPU in frequency space.
+		# Avoids a (2N×2N) float64 CPU allocation (~3.2 GB for N=10 000),
+		# the GPU transfer, and the rfft2 peak where noise + noise_fft
+		# coexist.  Each component is i.i.d. N(0, 1/2) so that the total
+		# complex variance is 1 per frequency bin.
+		noise_fft = xp.empty(psd.shape, dtype=xp.complex128)
+		noise_fft.real[:] = xp.random.standard_normal(psd.shape)
+		noise_fft.imag[:] = xp.random.standard_normal(psd.shape)
+		noise_fft *= (0.5 ** 0.5)
 	else:
-		noise = noise_np
-
-	# Forward real FFT → half-spectrum, same shape as psd.
-	noise_fft = xp.fft.rfft2(noise)           # shape: (n_large, n_large//2+1)
-	del noise  # free the (2N×2N) real array — no longer needed
+		# NumPy path: keep the pixel-space generation so the rng parameter
+		# (used for reproducible examples) continues to work.
+		if rng is None:
+			noise_np = np.random.standard_normal((n_large, n_large))
+		else:
+			noise_np = rng.standard_normal((n_large, n_large))
+		noise_fft = np.fft.rfft2(noise_np)
+		del noise_np
 
 	# sqrt in-place on psd to avoid a separate sqrt_psd allocation.
 	xp.sqrt(psd, out=psd)
-	field_fft = psd * noise_fft
-	del noise_fft  # free (2N×(N+1)) complex array
+	# Multiply in-place: avoids a 3.2 GB temporary while noise_fft is alive.
+	noise_fft *= psd
 
 	# Inverse real FFT → guaranteed real output, no .real() needed.
-	field_large = xp.fft.irfft2(field_fft, s=(n_large, n_large))
-	del field_fft  # free (2N×(N+1)) complex array
+	field_large = xp.fft.irfft2(noise_fft, s=(n_large, n_large))
+	del noise_fft  # free (2N×(N+1)) complex array
 
 	# Centre-crop to n_pix × n_pix
 	start = (n_large - n_pix) // 2
@@ -154,8 +158,34 @@ def nebula(grid, n_pix: int, exponent: float, percentile: float):
 	"""
 	xp = cp if is_cupy_array(grid) else np
 	psd = powerlaw_psd(grid, exponent)
-	field = grf_from_psd(n_pix, psd)
-	del psd
+
+	# Inline the GRF construction so that psd can be freed *before* the
+	# irfft2 allocation.  If we delegated to grf_from_psd(), nebula's
+	# reference to psd would keep it alive throughout the call and the
+	# irfft2 step would hit grid(1.6) + psd(1.6) + noise_fft(3.2) +
+	# field_large(3.2) = 9.6 GB for N=10 000, causing an OOM.
+	n_large = psd.shape[0]  # = 2 * n_pix
+
+	if xp is not np:
+		noise_fft = xp.empty(psd.shape, dtype=xp.complex128)
+		noise_fft.real[:] = xp.random.standard_normal(psd.shape)
+		noise_fft.imag[:] = xp.random.standard_normal(psd.shape)
+		noise_fft *= (0.5 ** 0.5)
+	else:
+		noise_np = np.random.standard_normal((n_large, n_large))
+		noise_fft = np.fft.rfft2(noise_np)
+		del noise_np
+
+	xp.sqrt(psd, out=psd)
+	noise_fft *= psd
+	del psd  # free ~1.6 GB before the irfft2 allocation
+
+	field_large = xp.fft.irfft2(noise_fft, s=(n_large, n_large))
+	del noise_fft
+
+	start = (n_large - n_pix) // 2
+	field = field_large[start:start + n_pix, start:start + n_pix].copy()
+	del field_large
 
 	# Threshold at the requested percentile
 	if xp is not np:
