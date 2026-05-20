@@ -60,18 +60,17 @@ def generate_image_from_components(
 		2D image of shape ``(n_pix, n_pix)``.
 	"""
 	xp = cp if is_cupy_array(grid) else np
-	print("DEBUG 1", flush=True)
+	
 	composite = xp.zeros((n_pix, n_pix), dtype=xp.float64)
-	print("DEBUG 2", flush=True)
 	flux_arr = xp.asarray(flux_list, dtype=xp.float64)
-	print("DEBUG 3", flush=True)
+
 	for idx, (func, params, flux) in enumerate(
 		zip(function_list, params_list, flux_arr)
 	):
 		flux = float(flux)
 		if flux == 0.0:
 			continue
-		print("DEBUG 4", flush=True)
+
 		# Retry loop for degenerate realisations
 		for attempt in range(max_iter):
 			# Call the generator
@@ -81,7 +80,6 @@ def generate_image_from_components(
 				obj = func(grid, n_pix, *params)
 			else:
 				obj = func(grid, n_pix, params)
-			print("DEBUG 5", flush=True)
 			del func, params  # free memory if using CuPy
 
 			# Validate
@@ -95,7 +93,7 @@ def generate_image_from_components(
 
 		# Normalise by max so flux controls the peak brightness
 		obj_max = float(xp.max(obj))
-		print("DEBUG 6", flush=True)
+
 		if obj_max > 0.0:
 			composite += flux * (obj / obj_max)
 		del obj, obj_max  # free memory if using CuPy
