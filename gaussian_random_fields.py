@@ -102,7 +102,8 @@ def grf_from_psd(n_pix, psd, *, rng=None):
 		noise_np = rng.standard_normal((n_large, n_large))
 
 	if xp is not np:
-		noise = xp.asarray(noise_np)
+		with psd.device:
+			noise = xp.asarray(noise_np)
 		del noise_np  # free CPU buffer as soon as GPU copy is made
 	else:
 		noise = noise_np
