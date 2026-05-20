@@ -95,39 +95,39 @@ def grf_from_psd(n_pix, psd, *, rng=None):
 	xp = _get_xp(psd)
 	n_large = psd.shape[0]  # = 2 * n_pix
 
-	with psd.device:
+	# Draw real white noise in pixel space — avoids a 6 GB complex array.
+	if rng is None:
+		noise_np = np.random.standard_normal((n_large, n_large))
+	else:
+		noise_np = rng.standard_normal((n_large, n_large))
 
-		# Draw real white noise in pixel space — avoids a 6 GB complex array.
-		if rng is None:
-			noise_np = xp.random.standard_normal((n_large, n_large))
-		else:
-			noise_np = rng.standard_normal((n_large, n_large))
+	if xp is not np:
+		psd.device.use()  # ensure all CuPy ops below run on the same device as psd
+		noise = xp.asarray(noise_np)
+		del noise_np  # free CPU buffer as soon as GPU copy is made
+	else:
 		noise = noise_np
-		# if xp is not np:
-		# 	psd.device.use()  # ensure all CuPy ops below run on the same device as psd
-		# 	noise = xp.asarray(noise_np)
-		# 	del noise_np  # free CPU buffer as soon as GPU copy is made
-		# else:
-		# 	noise = noise_np
+		
+	print("psd device ", psd.device)
+	print("noise device ", noise.device)
+	# Forward real FFT → half-spectrum, same shape as psd.
+	noise_fft = xp.fft.rfft2(noise)           # shape: (n_large, n_large//2+1)
+	del noise  # free the (2N×2N) real array — no longer needed
 
-		# Forward real FFT → half-spectrum, same shape as psd.
-		noise_fft = xp.fft.rfft2(noise)           # shape: (n_large, n_large//2+1)
-		del noise  # free the (2N×2N) real array — no longer needed
+	# sqrt in-place on psd to avoid a separate sqrt_psd allocation.
+	xp.sqrt(psd, out=psd)
+	# Multiply in-place: avoids a 3.2 GB temporary while noise_fft is alive.
+	noise_fft *= psd
 
-		# sqrt in-place on psd to avoid a separate sqrt_psd allocation.
-		xp.sqrt(psd, out=psd)
-		# Multiply in-place: avoids a 3.2 GB temporary while noise_fft is alive.
-		noise_fft *= psd
+	# Inverse real FFT → guaranteed real output, no .real() needed.
+	field_large = xp.fft.irfft2(noise_fft, s=(n_large, n_large))
+	del noise_fft  # free (2N×(N+1)) complex array
 
-		# Inverse real FFT → guaranteed real output, no .real() needed.
-		field_large = xp.fft.irfft2(noise_fft, s=(n_large, n_large))
-		del noise_fft  # free (2N×(N+1)) complex array
-
-		# Centre-crop to n_pix × n_pix
-		start = (n_large - n_pix) // 2
-		field = field_large[start:start + n_pix, start:start + n_pix].copy()
-		del field_large
-		return field
+	# Centre-crop to n_pix × n_pix
+	start = (n_large - n_pix) // 2
+	field = field_large[start:start + n_pix, start:start + n_pix].copy()
+	del field_large
+	return field
 
 
 # ---------------------------------------------------------------------------
