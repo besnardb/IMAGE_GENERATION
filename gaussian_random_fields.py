@@ -32,8 +32,7 @@ def make_grid(n_pix: int, use_cupy: bool = False, device_id: int = 0):
 		device.use()
 		device_name = cp.cuda.runtime.getDeviceProperties(device)['name'].decode('utf-8')
 		print('Using device: ', device_name)
-		if device_name.startswith('Tesla V100'):
-			cp.fft.config.enable_nd_planning = False
+
 	n_large = n_pix * 2
 	fx = xp.fft.fftfreq(n_large, d=1.0)        # shape (2N,)
 	fy = xp.fft.rfftfreq(n_large, d=1.0)       # shape (N+1,)
@@ -105,7 +104,6 @@ def grf_from_psd(n_pix, psd, *, rng=None):
 		noise_np = rng.standard_normal((n_large, n_large))
 
 	if xp is not np:
-		psd.device.use()  # ensure all CuPy ops below run on the same device as psd
 		noise = xp.asarray(noise_np)
 		del noise_np  # free CPU buffer as soon as GPU copy is made
 	else:
