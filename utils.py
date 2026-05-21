@@ -46,8 +46,6 @@ def create_new_header(image_size):
     return hdr
 
 def np_to_fits(img_xp, out_path):
-    if img_xp.device != 'cpu':
-        img_xp = img_xp.get()
     header = create_new_header(img_xp.shape[0])
     fits.PrimaryHDU(img_xp, header=header).writeto(
                     out_path, overwrite=True
@@ -55,8 +53,6 @@ def np_to_fits(img_xp, out_path):
     
 def _show(ax, img, title="", cmap="inferno", diverging=False, norm=None):
     """Helper: display one image in an axes."""
-    if img.device != 'cpu':
-        img = img.get()
     if diverging:
         vmax = float(np.percentile(np.abs(img), 98))
         ax.imshow(img, origin="lower", cmap="RdBu_r", vmin=-vmax, vmax=vmax)

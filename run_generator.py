@@ -2,6 +2,7 @@ import os
 import argparse
 from utils import load_config
 import numpy as np
+import cupy as cp
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 
@@ -13,18 +14,26 @@ from utils import np_to_fits, _show
 def make_compsite_image(cfg, grid):
     rng_comp = np.random.default_rng(cfg.general.n_seed)
     composites = []
+    use_cupy = cfg.general.use_gpus
     for i in range(cfg.general.n_images):
         funcs, params, fluxes = draw_random_image_parameters(cfg, rng=rng_comp)
         img = generate_image_from_components(
             grid, cfg.general.n_pix, funcs, params, fluxes,
         )
-        composites.append((img, [f.__name__ for f in funcs]))
         obj_names = [f.__name__ for f in funcs]
+
+        # Transfer to CPU
+        img_cpu = img.get() if use_cupy else img
+        composites.append((img_cpu, obj_names))
+
         print(f"  [{i+1}] {obj_names}  "
-            f"mean={float(np.mean(img)):.4f}  max={float(np.max(img)):.2f}", flush=True)
+            f"mean={float(np.mean(img_cpu)):.4f}  max={float(np.max(img_cpu)):.2f}", flush=True)
 
         out = os.path.join(cfg.general.output_dir, f"composite_{i+1}.fits")
-        np_to_fits(img, out)
+        np_to_fits(img_cpu, out)
+
+        if use_cupy:
+            cp.get_default_memory_pool().free_all_blocks() # free GPU memory
     
     if cfg.general.generate_previews:
         generate_preview_composite_image(cfg, composites)

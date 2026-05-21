@@ -80,13 +80,12 @@ def generate_image_from_components(
 				obj = func(grid, n_pix, *params)
 			else:
 				obj = func(grid, n_pix, params)
-			del func, params  # free memory if using CuPy
 
 			# Validate
 			obj_sum = float(xp.sum(obj))
 			if obj_sum > 0.0 and not xp.isnan(obj_sum):
 				break
-			del obj_sum  # free memory if using CuPy
+			del obj, obj_sum
 		else:
 			# All attempts failed – skip this object
 			continue
