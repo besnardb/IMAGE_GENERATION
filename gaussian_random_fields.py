@@ -30,7 +30,10 @@ def make_grid(n_pix: int, use_cupy: bool = False, device_id: int = 0):
 	if use_cupy:
 		device = cp.cuda.Device(device_id)
 		device.use()
-		print('Using device: ', cp.cuda.runtime.getDeviceProperties(device)['name'])
+		device_name = cp.cuda.runtime.getDeviceProperties(device)['name'].decode('utf-8')
+		print('Using device: ', device_name)
+		if device_name.startswith('Tesla V100'):
+			cp.fft.config.enable_nd_planning = False
 	n_large = n_pix * 2
 	fx = xp.fft.fftfreq(n_large, d=1.0)        # shape (2N,)
 	fy = xp.fft.rfftfreq(n_large, d=1.0)       # shape (N+1,)
@@ -107,9 +110,7 @@ def grf_from_psd(n_pix, psd, *, rng=None):
 		del noise_np  # free CPU buffer as soon as GPU copy is made
 	else:
 		noise = noise_np
-		
-	print("psd device ", psd.device)
-	print("noise device ", noise.device)
+	
 	# Forward real FFT → half-spectrum, same shape as psd.
 	noise_fft = xp.fft.rfft2(noise)           # shape: (n_large, n_large//2+1)
 	del noise  # free the (2N×2N) real array — no longer needed
