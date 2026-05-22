@@ -25,6 +25,30 @@ def _normalize_mean(image, xp):
 		return image / mean_val
 	return xp.ones_like(image)
 
+
+def _tukey_window_2d(n_pix: int, alpha: float, xp):
+	"""2D Tukey (tapered cosine) window of shape (n_pix, n_pix).
+
+	*alpha* is the fraction of the image width used for the cosine taper on
+	each side (e.g. 0.1 → 10 % taper on each border).  The central
+	``1 - 2*alpha`` fraction is flat at 1.  Values at the very edge reach 0.
+	"""
+	if alpha <= 0.0:
+		return xp.ones((n_pix, n_pix), dtype=xp.float64)
+	alpha = min(alpha, 0.5)  # clamp so tapers don't overlap
+	taper_len = int(alpha * n_pix)
+	if taper_len == 0:
+		return xp.ones((n_pix, n_pix), dtype=xp.float64)
+	# Build 1D window on CPU then transfer if needed
+	w1d = np.ones(n_pix, dtype=np.float64)
+	for i in range(taper_len):
+		val = 0.5 * (1.0 - np.cos(np.pi * i / taper_len))
+		w1d[i] = val
+		w1d[n_pix - 1 - i] = val
+	if xp is not np:
+		w1d = xp.asarray(w1d)
+	return xp.outer(w1d, w1d)
+
 def make_grid(n_pix: int, use_cupy: bool = False, device_id: int = 0):
 	xp = cp if use_cupy else np
 	if use_cupy:
@@ -133,7 +157,7 @@ def grf_from_psd(n_pix, psd, *, rng=None):
 # Astronomical object generators
 # ---------------------------------------------------------------------------
 
-def nebula(grid, n_pix: int, exponent: float, percentile: float):
+def nebula(grid, n_pix: int, exponent: float, percentile: float, border_taper: float = 0.0):
 	"""Generate a nebula-like object via a thresholded power-law GRF.
 
 	Parameters
@@ -148,6 +172,11 @@ def nebula(grid, n_pix: int, exponent: float, percentile: float):
 	percentile : float
 		Percentile threshold (0–100).  Pixels below the threshold are
 		zeroed, creating a sparse, cloudy structure.
+	border_taper : float, optional
+		Fraction of the image width (0–0.5) used for a cosine taper applied
+		to the GRF **before** thresholding.  The tapered border region is
+		suppressed toward zero so it naturally falls below the threshold and
+		is zeroed by the clip step.  Default 0.0 (no taper).
 
 	Returns
 	-------
@@ -158,6 +187,10 @@ def nebula(grid, n_pix: int, exponent: float, percentile: float):
 	psd = powerlaw_psd(grid, exponent)
 	field = grf_from_psd(n_pix, psd)
 	del psd
+
+	if border_taper > 0.0:
+		window = _tukey_window_2d(n_pix, border_taper, xp)
+		field *= window
 
 	# Threshold at the requested percentile
 	if xp is not np:

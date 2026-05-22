@@ -17,6 +17,7 @@ def make_compsite_image(cfg, grid):
     use_cupy = cfg.general.use_gpus
     for i in range(cfg.general.n_images):
         funcs, params, fluxes = draw_random_image_parameters(cfg, rng=rng_comp)
+        print("fluxes:", [float(f) for f in fluxes])
         img = generate_image_from_components(
             grid, cfg.general.n_pix, funcs, params, fluxes,
         )
@@ -30,7 +31,7 @@ def make_compsite_image(cfg, grid):
             f"mean={float(np.mean(img_cpu)):.4f}  max={float(np.max(img_cpu)):.2f}", flush=True)
 
         out = os.path.join(cfg.general.output_dir, f"composite_{i+1}.fits")
-        np_to_fits(img_cpu, out)
+        np_to_fits(img_cpu, out, pixel_size_arcsec=cfg.general.pixel_size_arcsec)
 
         if use_cupy:
             cp.get_default_memory_pool().free_all_blocks() # free GPU memory

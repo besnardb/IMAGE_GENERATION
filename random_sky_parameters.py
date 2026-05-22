@@ -70,6 +70,7 @@ def draw_nebula_params(
 	exponent_max: float = 5.0,
 	percentile_min: float = 50.0,
 	percentile_max: float = 99.0,
+	border_taper: float = 0.0,
 	rng=None,
 ):
 	"""Draw random parameters for nebula generation."""
@@ -87,7 +88,7 @@ def draw_nebula_params(
 
 	exponent = exponent_min + (exponent_max - exponent_min) * u1
 	percentile = percentile_min + (percentile_max - percentile_min) * u2
-	return exponent, percentile
+	return exponent, percentile, float(border_taper)
 
 
 def draw_point_sources_params(
@@ -221,6 +222,7 @@ def draw_random_image_parameters(
 				exponent_max=cfg.sky.nebula.exponent_max,
 				percentile_min=cfg.sky.nebula.percentile_min,
 				percentile_max=cfg.sky.nebula.percentile_max,
+				border_taper=getattr(cfg.sky.nebula, 'border_taper', 0.0),
 				rng=rng,
 			)
 		elif func is point_sources:

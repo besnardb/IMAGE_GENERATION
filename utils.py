@@ -19,10 +19,11 @@ def load_config(config_path, section=None):
 
     return cfg
 
-def create_new_header(image_size):
+def create_new_header(image_size, pixel_size_arcsec=1.5):
     hdr = fits.Header()
     naxis1 = int(image_size)
     naxis2 = int(image_size)
+    cdelt = pixel_size_arcsec / 3600.0  # arcsec → degrees
     hdr["SIMPLE"] = True
     hdr["BITPIX"] = -32
     hdr["NAXIS"] = 2
@@ -31,8 +32,8 @@ def create_new_header(image_size):
     hdr["WCSAXES"] = 2
     hdr["CRPIX1"] = (image_size + 1) / 2.0
     hdr["CRPIX2"] = (image_size + 1) / 2.0
-    hdr["CDELT1"] = -0.00041666666666667 # define pixel size
-    hdr["CDELT2"] = 0.00041666666666667 # define pixel size
+    hdr["CDELT1"] = -cdelt
+    hdr["CDELT2"] = cdelt
     hdr["UNIT1"] = 'deg' 
     hdr["UNIT2"] = 'deg' 
     hdr["CTYPE1"] = 'RA---SIN'
@@ -41,12 +42,13 @@ def create_new_header(image_size):
     hdr["CRVAL2"] = 0
     hdr["LONPOLE"] = 180.0
     hdr["LATPOLE"] = 0.0
+    hdr["BUNIT"] = "JY/PIXEL"
     hdr["ORIGIN"] = "Synthetic image by IMAGE_GENERATION"
     
     return hdr
 
-def np_to_fits(img_xp, out_path):
-    header = create_new_header(img_xp.shape[0])
+def np_to_fits(img_xp, out_path, pixel_size_arcsec=1.5):
+    header = create_new_header(img_xp.shape[0], pixel_size_arcsec)
     fits.PrimaryHDU(img_xp, header=header).writeto(
                     out_path, overwrite=True
                 )
