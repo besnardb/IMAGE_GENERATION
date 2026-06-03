@@ -25,13 +25,21 @@ def make_compsite_image(cfg, grid):
 
         # Transfer to CPU
         img_cpu = img.get() if use_cupy else img
+
+        # TEST: pad image to 4x area (2x per side) with zero border
+        # _n = cfg.general.n_pix
+        # _pad = np.zeros((2 * _n, 2 * _n), dtype=img_cpu.dtype)
+        # _pad[_n // 2:_n // 2 + _n, _n // 2:_n // 2 + _n] = img_cpu
+        # img_cpu = _pad
+
         composites.append((img_cpu, obj_names))
 
         print(f"  [{i+1}] {obj_names}  "
             f"mean={float(np.mean(img_cpu)):.4f}  max={float(np.max(img_cpu)):.2f}", flush=True)
 
         out = os.path.join(cfg.general.output_dir, f"composite_{i+1}.fits")
-        np_to_fits(img_cpu, out, pixel_size_arcsec=cfg.general.pixel_size_arcsec)
+        ref_freq = float((float(cfg.general.freq_start_hz) + float(cfg.general.freq_end_hz)) / 2)
+        np_to_fits(img_cpu, out, ref_freq=ref_freq, pixel_size_arcsec=cfg.general.pixel_size_arcsec)
 
         if use_cupy:
             cp.get_default_memory_pool().free_all_blocks() # free GPU memory

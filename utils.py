@@ -19,7 +19,7 @@ def load_config(config_path, section=None):
 
     return cfg
 
-def create_new_header(image_size, pixel_size_arcsec=1.5):
+def create_new_header(image_size, ref_freq, pixel_size_arcsec=1.5):
     hdr = fits.Header()
     naxis1 = int(image_size)
     naxis2 = int(image_size)
@@ -44,11 +44,11 @@ def create_new_header(image_size, pixel_size_arcsec=1.5):
     hdr["LATPOLE"] = 0.0
     hdr["BUNIT"] = "JY/PIXEL"
     hdr["ORIGIN"] = "Synthetic image by IMAGE_GENERATION"
-    
+    hdr["RESTFRQ"] = ref_freq
     return hdr
 
-def np_to_fits(img_xp, out_path, pixel_size_arcsec=1.5):
-    header = create_new_header(img_xp.shape[0], pixel_size_arcsec)
+def np_to_fits(img_xp, out_path, ref_freq, pixel_size_arcsec=1.5):
+    header = create_new_header(img_xp.shape[0], ref_freq, pixel_size_arcsec)
     fits.PrimaryHDU(img_xp, header=header).writeto(
                     out_path, overwrite=True
                 )

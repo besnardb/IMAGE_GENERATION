@@ -7,14 +7,16 @@ general:
   n_objects_min: 2
   n_objects_max: 5
   pixel_size_arcsec: 1.5
+  freq_start_hz: 1.300e9
+  freq_end_hz: 1.340e9
   generate_previews: true
   output_dir: "./output"
 
 sky:
   nebula:
     weight: 0.8
-    flux_min: 0.005
-    flux_max: 0.001
+    flux_min: 0.001
+    flux_max: 0.005
     exponent_min: 3.0
     exponent_max: 4.0
     percentile_min: 99.0
