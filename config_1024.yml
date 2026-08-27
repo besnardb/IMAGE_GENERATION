@@ -1,0 +1,45 @@
+general:
+  use_gpus: true
+  device_id: 6
+  n_seed: 144
+  n_pix: 1024
+  n_images: 1
+  n_objects_min: 2
+  n_objects_max: 5
+  freq_start_hz: 100e6
+  freq_end_hz: 150e6
+  generate_previews: false
+  output_dir: "./output"
+
+sky:
+  nebula:
+    weight: 0.8
+    flux_min: 0.001
+    flux_max: 0.005
+    exponent_min: 3.0
+    exponent_max: 4.0
+    percentile_min: 99.0
+    percentile_max: 99.5
+    border_taper: 0.2
+
+  point_sources:
+    weight: 1.0
+    flux_min: 0.05
+    flux_max: 1.0
+    n_min: 30
+    n_max: 300
+    exponent_min: 1.2
+    exponent_max: 1.5
+
+  sharp_edges:
+    weight: 0.0
+    flux_min: 0.002
+    flux_max: 0.03
+    exponent_lf_min: 1.5
+    exponent_lf_max: 5.0
+    percentile_lf_min: 50.0
+    percentile_lf_max: 99.0
+    exponent_hf_min: 1.5
+    exponent_hf_max: 5.0
+    vmin_hf_min: 0.0
+    vmin_hf_max: 1.0

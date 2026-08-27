@@ -1,22 +1,21 @@
 general:
   use_gpus: true
-  device_id: 7
+  device_id: 6
   n_seed: 144
-  n_pix: 1024
-  n_images: 10
+  n_pix: 20000
+  n_images: 1
   n_objects_min: 2
   n_objects_max: 5
-  pixel_size_arcsec: 1.5
-  freq_start_hz: 1.300e9
-  freq_end_hz: 1.340e9
-  generate_previews: true
+  freq_start_hz: 100e6
+  freq_end_hz: 150e6
+  generate_previews: false
   output_dir: "./output"
 
 sky:
   nebula:
     weight: 0.8
-    flux_min: 0.001
-    flux_max: 0.005
+    flux_min: 0.000002
+    flux_max: 0.00001
     exponent_min: 3.0
     exponent_max: 4.0
     percentile_min: 99.0

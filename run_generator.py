@@ -39,7 +39,7 @@ def make_compsite_image(cfg, grid):
 
         out = os.path.join(cfg.general.output_dir, f"composite_{i+1}.fits")
         ref_freq = float((float(cfg.general.freq_start_hz) + float(cfg.general.freq_end_hz)) / 2)
-        np_to_fits(img_cpu, out, ref_freq=ref_freq, pixel_size_arcsec=cfg.general.pixel_size_arcsec)
+        np_to_fits(img_cpu, out, ref_freq=ref_freq)
 
         if use_cupy:
             cp.get_default_memory_pool().free_all_blocks() # free GPU memory

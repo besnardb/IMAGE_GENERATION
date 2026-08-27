@@ -19,10 +19,11 @@ def load_config(config_path, section=None):
 
     return cfg
 
-def create_new_header(image_size, ref_freq, pixel_size_arcsec=1.5):
+def create_new_header(image_size, ref_freq):
     hdr = fits.Header()
     naxis1 = int(image_size)
     naxis2 = int(image_size)
+    pixel_size_arcsec = 1.5 * 1024 / image_size
     cdelt = pixel_size_arcsec / 3600.0  # arcsec → degrees
     hdr["SIMPLE"] = True
     hdr["BITPIX"] = -32
@@ -47,8 +48,8 @@ def create_new_header(image_size, ref_freq, pixel_size_arcsec=1.5):
     hdr["RESTFRQ"] = ref_freq
     return hdr
 
-def np_to_fits(img_xp, out_path, ref_freq, pixel_size_arcsec=1.5):
-    header = create_new_header(img_xp.shape[0], ref_freq, pixel_size_arcsec)
+def np_to_fits(img_xp, out_path, ref_freq):
+    header = create_new_header(img_xp.shape[0], ref_freq)
     fits.PrimaryHDU(img_xp, header=header).writeto(
                     out_path, overwrite=True
                 )
@@ -63,5 +64,5 @@ def _show(ax, img, title="", cmap="inferno", diverging=False, norm=None):
     else:
         vmax = float(np.max(img)) if img.max() > 0 else 1.0
         ax.imshow(img, origin="lower", cmap=cmap, vmin=0, vmax=vmax)
-    ax.set_title(title, fontsize=8)
+    #ax.set_title(title, fontsize=8)
     ax.axis("off")

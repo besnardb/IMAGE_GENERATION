@@ -57,7 +57,7 @@ def make_grid(n_pix: int, use_cupy: bool = False, device_id: int = 0):
 		device_name = cp.cuda.runtime.getDeviceProperties(device)['name'].decode('utf-8')
 		print('Using device: ', device_name)
 
-	n_large = n_pix * 2
+	n_large = n_pix * 1.5
 	fx = xp.fft.fftfreq(n_large, d=1.0)        # shape (2N,)
 	fy = xp.fft.rfftfreq(n_large, d=1.0)       # shape (N+1,)
 	fx_large, fy_large = xp.meshgrid(fx, fy, indexing='ij')
