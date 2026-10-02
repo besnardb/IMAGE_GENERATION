@@ -1,0 +1,16 @@
+[project]
+name = "image_generation"
+version = "0.1.0"
+description = "Generation of realistic radio images"
+readme = "README.md"
+authors = [
+    { name = "Baptiste Besnard", email = "baptiste.besnard@obspm.fr" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "astropy",
+    "numpy>=2",
+    "cupy",
+    "PyYAML",
+    "matplotlib",
+]
