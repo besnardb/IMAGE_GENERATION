@@ -3,7 +3,7 @@ general:
   device_id: 6
   n_seed: 144
   n_pix: 1024
-  n_images: 1
+  n_images: 6
   n_objects_min: 2
   n_objects_max: 5
   freq_start_hz: 100e6
@@ -23,7 +23,7 @@ sky:
     border_taper: 0.2
 
   point_sources:
-    weight: 1.0
+    weight: 0.0
     flux_min: 0.05
     flux_max: 1.0
     n_min: 30

@@ -23,8 +23,9 @@ def create_new_header(image_size, ref_freq):
     hdr = fits.Header()
     naxis1 = int(image_size)
     naxis2 = int(image_size)
-    pixel_size_arcsec = 1.5 * 1024 / image_size
-    cdelt = pixel_size_arcsec / 3600.0  # arcsec → degrees
+    default_fov_deg = 5.0
+    pixel_size_deg = default_fov_deg / image_size
+    cdelt = pixel_size_deg
     hdr["SIMPLE"] = True
     hdr["BITPIX"] = -32
     hdr["NAXIS"] = 2
@@ -39,7 +40,7 @@ def create_new_header(image_size, ref_freq):
     hdr["UNIT2"] = 'deg' 
     hdr["CTYPE1"] = 'RA---SIN'
     hdr["CTYPE2"] = 'DEC--SIN'
-    hdr["CRVAL1"] = 0
+    hdr["CRVAL1"] = 180.0
     hdr["CRVAL2"] = 0
     hdr["LONPOLE"] = 180.0
     hdr["LATPOLE"] = 0.0

@@ -5,11 +5,18 @@ import numpy as np
 import cupy as cp
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
+import astropy.units as u
+from astropy.coordinates import SkyCoord
+from astropy.wcs.utils import skycoord_to_pixel
+from astropy.io import fits
+from astropy.wcs import WCS
 
 from random_sky_parameters import draw_random_image_parameters
 from image_generator import generate_image_from_components
 from gaussian_random_fields import make_grid
-from utils import np_to_fits, _show
+from utils import np_to_fits, _show, create_new_header
+
+from generate_lotss_catalog.catalog import xcatalog
 
 def make_compsite_image(cfg, grid):
     rng_comp = np.random.default_rng(cfg.general.n_seed)
@@ -24,7 +31,7 @@ def make_compsite_image(cfg, grid):
         obj_names = [f.__name__ for f in funcs]
 
         # Transfer to CPU
-        img_cpu = img.get() if use_cupy else img
+        img_nebula = img.get() if use_cupy else img
 
         # TEST: pad image to 4x area (2x per side) with zero border
         # _n = cfg.general.n_pix
@@ -32,20 +39,42 @@ def make_compsite_image(cfg, grid):
         # _pad[_n // 2:_n // 2 + _n, _n // 2:_n // 2 + _n] = img_cpu
         # img_cpu = _pad
 
-        composites.append((img_cpu, obj_names))
+        composites.append((img_nebula, obj_names))
 
         print(f"  [{i+1}] {obj_names}  "
-            f"mean={float(np.mean(img_cpu)):.4f}  max={float(np.max(img_cpu)):.2f}", flush=True)
+            f"mean={float(np.mean(img_nebula)):.4f}  max={float(np.max(img_nebula)):.2f}", flush=True)
 
         out = os.path.join(cfg.general.output_dir, f"composite_{i+1}.fits")
         ref_freq = float((float(cfg.general.freq_start_hz) + float(cfg.general.freq_end_hz)) / 2)
-        np_to_fits(img_cpu, out, ref_freq=ref_freq)
+        image_sources = generate_lotss_catalog(cfg, ref_freq=ref_freq)
+        image_total = img_nebula + image_sources
+        np_to_fits(image_total, out, ref_freq=ref_freq)
 
         if use_cupy:
             cp.get_default_memory_pool().free_all_blocks() # free GPU memory
     
     if cfg.general.generate_previews:
         generate_preview_composite_image(cfg, composites)
+
+def generate_lotss_catalog(cfg, ref_freq=None):
+    sources_skymodel = xcatalog.generate_skymodel_dr3(pointing_centre=SkyCoord(180*u.deg,0*u.deg,frame='fk5'),
+                flux_max=1.5)
+
+    data = np.zeros((cfg.general.n_pix, cfg.general.n_pix), dtype=np.float32)
+    header = create_new_header(cfg.general.n_pix, ref_freq)
+    hdu = fits.PrimaryHDU(data, header=header)
+    wcs = WCS(hdu.header)
+    coords = SkyCoord(ra=sources_skymodel.cat["RA"],dec=sources_skymodel.cat["DEC"],unit=u.rad,frame="fk5")
+    x, y = skycoord_to_pixel(coords, wcs, origin=0)
+    image = np.zeros_like(hdu.data)
+    x = np.clip(x, 0, image.shape[1]-1)
+    y = np.clip(y, 0, image.shape[0]-1)
+    for xi, yi, flux in zip(x.astype(int), y.astype(int), sources_skymodel.cat["Flux"]):
+        image[yi, xi] = flux[0]  # Accumulate flux if multiple sources fall into the same pixel
+    
+    return image
+
+
 
 def generate_preview_composite_image(cfg, composites):
     fig, axes = plt.subplots(2, 3, figsize=(10, 7))
