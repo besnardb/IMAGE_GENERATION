@@ -57,8 +57,8 @@ def make_compsite_image(cfg, grid):
         generate_preview_composite_image(cfg, composites)
 
 def generate_lotss_catalog(cfg, ref_freq=None):
-    sources_skymodel = xcatalog.generate_skymodel_dr3(pointing_centre=SkyCoord(180*u.deg,0*u.deg,frame='fk5'),
-                flux_max=1.5)
+    sources_skymodel = xcatalog.generate_skymodel_dr3(pointing_centre=SkyCoord(180*u.deg,10*u.deg,frame='fk5'),
+                flux_max=2, fov=5.0*u.deg)
 
     data = np.zeros((cfg.general.n_pix, cfg.general.n_pix), dtype=np.float32)
     header = create_new_header(cfg.general.n_pix, ref_freq)

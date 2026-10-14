@@ -41,7 +41,7 @@ def create_new_header(image_size, ref_freq):
     hdr["CTYPE1"] = 'RA---SIN'
     hdr["CTYPE2"] = 'DEC--SIN'
     hdr["CRVAL1"] = 180.0
-    hdr["CRVAL2"] = 0
+    hdr["CRVAL2"] = 10.0
     hdr["LONPOLE"] = 180.0
     hdr["LATPOLE"] = 0.0
     hdr["BUNIT"] = "JY/PIXEL"
